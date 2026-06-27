@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="zh-Hant">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>五天四夜旅遊行程規劃</title>
+    <meta name="description" content="可儲存連結、YouTube、文字筆記與每日行程的五天四夜旅行規劃工具。">
+    <link rel="stylesheet" href="styles.css">
+  </head>
+  <body>
+    <header class="app-header">
+      <div>
+        <p class="eyebrow">Travel Planner</p>
+        <h1>五天四夜旅遊行程</h1>
+      </div>
+      <div class="header-actions">
+        <button class="ghost-button" id="exportBtn" type="button">匯出 JSON</button>
+        <label class="ghost-button file-button">
+          匯入 JSON
+          <input id="importInput" type="file" accept="application/json">
+        </label>
+        <button class="danger-button" id="resetBtn" type="button">清空</button>
+      </div>
+    </header>
+
+    <main class="app-shell">
+      <aside class="trip-panel" aria-label="旅程摘要">
+        <section class="panel-section">
+          <label for="tripTitle">旅程名稱</label>
+          <input id="tripTitle" type="text" maxlength="40" placeholder="例如：京都賞楓五天四夜">
+        </section>
+
+        <section class="panel-section two-columns">
+          <div>
+            <label for="startDate">出發日</label>
+            <input id="startDate" type="date">
+          </div>
+          <div>
+            <label for="budget">預算</label>
+            <input id="budget" type="number" min="0" step="100" placeholder="NT$">
+          </div>
+        </section>
+
+        <section class="panel-section">
+          <label for="packingList">打包清單</label>
+          <textarea id="packingList" rows="7" placeholder="護照、充電器、雨傘、常備藥..."></textarea>
+        </section>
+
+        <section class="panel-section compact-stats" id="tripStats" aria-live="polite"></section>
+      </aside>
+
+      <section class="planner-area">
+        <div class="day-tabs" id="dayTabs" role="tablist" aria-label="選擇天數"></div>
+
+        <section class="composer" aria-label="新增行程項目">
+          <div class="composer-top">
+            <div>
+              <h2 id="activeDayTitle">Day 1</h2>
+              <p id="activeDayDate">尚未設定日期</p>
+            </div>
+            <div class="type-toggle" role="group" aria-label="項目類型">
+              <button class="type-button active" type="button" data-type="place">景點</button>
+              <button class="type-button" type="button" data-type="food">美食</button>
+              <button class="type-button" type="button" data-type="link">連結</button>
+              <button class="type-button" type="button" data-type="youtube">YouTube</button>
+              <button class="type-button" type="button" data-type="note">文字</button>
+            </div>
+          </div>
+
+          <form id="itemForm" class="item-form">
+            <input id="itemTitle" type="text" maxlength="60" placeholder="標題，例如：伏見稻荷大社" required>
+            <input id="itemTime" type="time" aria-label="時間">
+            <input id="itemUrl" type="url" placeholder="貼上網頁或 YouTube 連結">
+            <textarea id="itemNote" rows="3" maxlength="400" placeholder="備註、交通方式、票價、提醒事項..."></textarea>
+            <button class="primary-button" type="submit">新增到這一天</button>
+          </form>
+        </section>
+
+        <section class="timeline" id="timeline" aria-live="polite"></section>
+      </section>
+    </main>
+
+    <template id="itemTemplate">
+      <article class="trip-item" draggable="true">
+        <div class="item-media"></div>
+        <div class="item-content">
+          <div class="item-heading">
+            <span class="item-type"></span>
+            <input class="item-time" type="time" aria-label="調整時間">
+          </div>
+          <input class="item-title" type="text" maxlength="60" aria-label="項目標題">
+          <textarea class="item-note" rows="2" maxlength="400" aria-label="項目備註"></textarea>
+          <a class="item-url" target="_blank" rel="noreferrer"></a>
+        </div>
+        <div class="item-actions">
+          <button class="icon-button move-up" type="button" title="上移" aria-label="上移">↑</button>
+          <button class="icon-button move-down" type="button" title="下移" aria-label="下移">↓</button>
+          <button class="icon-button delete-item" type="button" title="刪除" aria-label="刪除">×</button>
+        </div>
+      </article>
+    </template>
+
+    <script src="script.js"></script>
+  </body>
+</html>

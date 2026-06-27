@@ -1,0 +1,374 @@
+const DAYS = 5;
+const STORAGE_KEY = "github-pages-trip-planner-v1";
+
+const typeLabels = {
+  place: "景點",
+  food: "美食",
+  link: "連結",
+  youtube: "YouTube",
+  note: "文字"
+};
+
+const typeFallbacks = {
+  place: "景點",
+  food: "美食",
+  link: "LINK",
+  youtube: "YT",
+  note: "NOTE"
+};
+
+const defaultState = {
+  title: "",
+  startDate: "",
+  budget: "",
+  packingList: "",
+  activeDay: 0,
+  selectedType: "place",
+  days: Array.from({ length: DAYS }, () => [])
+};
+
+let state = loadState();
+let dragIndex = null;
+
+const els = {
+  tripTitle: document.querySelector("#tripTitle"),
+  startDate: document.querySelector("#startDate"),
+  budget: document.querySelector("#budget"),
+  packingList: document.querySelector("#packingList"),
+  tripStats: document.querySelector("#tripStats"),
+  dayTabs: document.querySelector("#dayTabs"),
+  activeDayTitle: document.querySelector("#activeDayTitle"),
+  activeDayDate: document.querySelector("#activeDayDate"),
+  itemForm: document.querySelector("#itemForm"),
+  itemTitle: document.querySelector("#itemTitle"),
+  itemTime: document.querySelector("#itemTime"),
+  itemUrl: document.querySelector("#itemUrl"),
+  itemNote: document.querySelector("#itemNote"),
+  timeline: document.querySelector("#timeline"),
+  exportBtn: document.querySelector("#exportBtn"),
+  importInput: document.querySelector("#importInput"),
+  resetBtn: document.querySelector("#resetBtn"),
+  template: document.querySelector("#itemTemplate")
+};
+
+function loadState() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(STORAGE_KEY));
+    if (!saved || !Array.isArray(saved.days)) return structuredClone(defaultState);
+    return {
+      ...structuredClone(defaultState),
+      ...saved,
+      days: Array.from({ length: DAYS }, (_, index) => saved.days[index] || [])
+    };
+  } catch {
+    return structuredClone(defaultState);
+  }
+}
+
+function saveState() {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+  renderStats();
+}
+
+function toDateLabel(dayIndex) {
+  if (!state.startDate) return "尚未設定日期";
+  const date = new Date(`${state.startDate}T00:00:00`);
+  date.setDate(date.getDate() + dayIndex);
+  return new Intl.DateTimeFormat("zh-Hant", {
+    month: "long",
+    day: "numeric",
+    weekday: "short"
+  }).format(date);
+}
+
+function getYouTubeId(url) {
+  try {
+    const parsed = new URL(url);
+    if (parsed.hostname.includes("youtu.be")) return parsed.pathname.slice(1);
+    if (parsed.hostname.includes("youtube.com")) {
+      if (parsed.searchParams.get("v")) return parsed.searchParams.get("v");
+      const shortsMatch = parsed.pathname.match(/\/shorts\/([^/?]+)/);
+      if (shortsMatch) return shortsMatch[1];
+    }
+  } catch {
+    return "";
+  }
+  return "";
+}
+
+function getPreview(item) {
+  const url = item.url?.trim();
+  if (!url) return { text: typeFallbacks[item.type] || "ITEM" };
+
+  const youtubeId = getYouTubeId(url);
+  if (youtubeId) {
+    return {
+      image: `https://img.youtube.com/vi/${youtubeId}/hqdefault.jpg`,
+      text: "YouTube"
+    };
+  }
+
+  try {
+    const parsed = new URL(url);
+    const host = parsed.hostname.replace(/^www\./, "");
+    return {
+      image: `https://s.wordpress.com/mshots/v1/${encodeURIComponent(parsed.href)}?w=600`,
+      text: host
+    };
+  } catch {
+    return { text: typeFallbacks[item.type] || "ITEM" };
+  }
+}
+
+function createId() {
+  if (globalThis.crypto?.randomUUID) return globalThis.crypto.randomUUID();
+  return `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+}
+
+function syncInputs() {
+  els.tripTitle.value = state.title;
+  els.startDate.value = state.startDate;
+  els.budget.value = state.budget;
+  els.packingList.value = state.packingList;
+}
+
+function renderDayTabs() {
+  els.dayTabs.innerHTML = "";
+  state.days.forEach((items, index) => {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = `day-tab${index === state.activeDay ? " active" : ""}`;
+    button.setAttribute("role", "tab");
+    button.setAttribute("aria-selected", String(index === state.activeDay));
+    button.innerHTML = `<strong>Day ${index + 1}</strong><span>${toDateLabel(index)} · ${items.length} 項</span>`;
+    button.addEventListener("click", () => {
+      state.activeDay = index;
+      saveState();
+      render();
+    });
+    els.dayTabs.append(button);
+  });
+}
+
+function renderStats() {
+  const totalItems = state.days.reduce((sum, day) => sum + day.length, 0);
+  const links = state.days.flat().filter((item) => item.url).length;
+  els.tripStats.innerHTML = `
+    <div class="stat"><strong>${totalItems}</strong><span>行程項目</span></div>
+    <div class="stat"><strong>${links}</strong><span>已存連結</span></div>
+    <div class="stat"><strong>${DAYS}</strong><span>旅遊天數</span></div>
+  `;
+}
+
+function renderActiveDay() {
+  els.activeDayTitle.textContent = `Day ${state.activeDay + 1}`;
+  els.activeDayDate.textContent = toDateLabel(state.activeDay);
+  document.querySelectorAll(".type-button").forEach((button) => {
+    button.classList.toggle("active", button.dataset.type === state.selectedType);
+  });
+}
+
+function renderTimeline() {
+  const items = state.days[state.activeDay];
+  els.timeline.innerHTML = "";
+
+  if (!items.length) {
+    els.timeline.innerHTML = `
+      <div class="empty-state">
+        <div>
+          <strong>這一天還沒有行程</strong>
+          <p>新增景點、美食、網頁連結、YouTube 影片或純文字筆記。</p>
+        </div>
+      </div>
+    `;
+    return;
+  }
+
+  items.forEach((item, index) => {
+    const node = els.template.content.firstElementChild.cloneNode(true);
+    node.dataset.index = index;
+    const media = node.querySelector(".item-media");
+    const preview = getPreview(item);
+
+    if (preview.image) {
+      const img = document.createElement("img");
+      img.src = preview.image;
+      img.alt = item.title || preview.text;
+      img.loading = "lazy";
+      img.addEventListener("error", () => {
+        media.textContent = preview.text;
+      });
+      media.append(img);
+    } else {
+      media.textContent = preview.text;
+    }
+
+    node.querySelector(".item-type").textContent = typeLabels[item.type] || "項目";
+    const timeInput = node.querySelector(".item-time");
+    const titleInput = node.querySelector(".item-title");
+    const noteInput = node.querySelector(".item-note");
+    const link = node.querySelector(".item-url");
+
+    timeInput.value = item.time || "";
+    titleInput.value = item.title || "";
+    noteInput.value = item.note || "";
+
+    if (item.url) {
+      link.href = item.url;
+      link.textContent = item.url;
+    } else {
+      link.remove();
+    }
+
+    timeInput.addEventListener("input", () => updateItem(index, { time: timeInput.value }));
+    titleInput.addEventListener("input", () => updateItem(index, { title: titleInput.value }));
+    noteInput.addEventListener("input", () => updateItem(index, { note: noteInput.value }));
+    node.querySelector(".delete-item").addEventListener("click", () => deleteItem(index));
+    node.querySelector(".move-up").addEventListener("click", () => moveItem(index, index - 1));
+    node.querySelector(".move-down").addEventListener("click", () => moveItem(index, index + 1));
+
+    node.addEventListener("dragstart", () => {
+      dragIndex = index;
+      node.classList.add("dragging");
+    });
+    node.addEventListener("dragend", () => {
+      dragIndex = null;
+      node.classList.remove("dragging");
+    });
+    node.addEventListener("dragover", (event) => event.preventDefault());
+    node.addEventListener("drop", () => {
+      if (dragIndex === null || dragIndex === index) return;
+      moveItem(dragIndex, index);
+    });
+
+    els.timeline.append(node);
+  });
+}
+
+function updateItem(index, patch) {
+  state.days[state.activeDay][index] = {
+    ...state.days[state.activeDay][index],
+    ...patch
+  };
+  saveState();
+}
+
+function deleteItem(index) {
+  state.days[state.activeDay].splice(index, 1);
+  saveState();
+  render();
+}
+
+function moveItem(from, to) {
+  const items = state.days[state.activeDay];
+  if (to < 0 || to >= items.length) return;
+  const [item] = items.splice(from, 1);
+  items.splice(to, 0, item);
+  saveState();
+  render();
+}
+
+function addItem(event) {
+  event.preventDefault();
+  const title = els.itemTitle.value.trim();
+  if (!title) return;
+
+  const url = els.itemUrl.value.trim();
+  const youtubeId = getYouTubeId(url);
+  const type = youtubeId ? "youtube" : state.selectedType;
+
+  state.days[state.activeDay].push({
+    id: createId(),
+    type,
+    title,
+    time: els.itemTime.value,
+    url,
+    note: els.itemNote.value.trim()
+  });
+
+  els.itemForm.reset();
+  saveState();
+  render();
+}
+
+function exportJson() {
+  const blob = new Blob([JSON.stringify(state, null, 2)], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = `${state.title || "trip-plan"}.json`;
+  anchor.click();
+  URL.revokeObjectURL(url);
+}
+
+function importJson(file) {
+  if (!file) return;
+  const reader = new FileReader();
+  reader.addEventListener("load", () => {
+    try {
+      const imported = JSON.parse(reader.result);
+      if (!Array.isArray(imported.days)) throw new Error("Invalid file");
+      state = {
+        ...structuredClone(defaultState),
+        ...imported,
+        days: Array.from({ length: DAYS }, (_, index) => imported.days[index] || [])
+      };
+      saveState();
+      syncInputs();
+      render();
+    } catch {
+      alert("匯入失敗，請確認是這個行程工具匯出的 JSON 檔。");
+    }
+  });
+  reader.readAsText(file);
+}
+
+function resetTrip() {
+  if (!confirm("確定要清空目前所有行程嗎？")) return;
+  state = structuredClone(defaultState);
+  localStorage.removeItem(STORAGE_KEY);
+  syncInputs();
+  render();
+}
+
+function bindEvents() {
+  els.tripTitle.addEventListener("input", () => {
+    state.title = els.tripTitle.value;
+    saveState();
+  });
+  els.startDate.addEventListener("input", () => {
+    state.startDate = els.startDate.value;
+    saveState();
+    render();
+  });
+  els.budget.addEventListener("input", () => {
+    state.budget = els.budget.value;
+    saveState();
+  });
+  els.packingList.addEventListener("input", () => {
+    state.packingList = els.packingList.value;
+    saveState();
+  });
+  document.querySelectorAll(".type-button").forEach((button) => {
+    button.addEventListener("click", () => {
+      state.selectedType = button.dataset.type;
+      saveState();
+      renderActiveDay();
+    });
+  });
+  els.itemForm.addEventListener("submit", addItem);
+  els.exportBtn.addEventListener("click", exportJson);
+  els.importInput.addEventListener("change", (event) => importJson(event.target.files[0]));
+  els.resetBtn.addEventListener("click", resetTrip);
+}
+
+function render() {
+  renderDayTabs();
+  renderActiveDay();
+  renderTimeline();
+  renderStats();
+}
+
+syncInputs();
+bindEvents();
+render();
