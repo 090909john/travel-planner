@@ -112,6 +112,13 @@ h1 {
   cursor: pointer;
 }
 
+.stepper-row {
+  display: grid;
+  grid-template-columns: 42px minmax(0, 1fr) 42px;
+  gap: 8px;
+  align-items: center;
+}
+
 .app-shell {
   display: grid;
   grid-template-columns: minmax(260px, 340px) 1fr;
@@ -202,7 +209,7 @@ button:focus-visible {
 
 .day-tabs {
   display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(132px, 1fr));
   gap: 8px;
   margin-bottom: 12px;
 }

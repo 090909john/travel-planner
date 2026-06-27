@@ -1,5 +1,12 @@
-const DAYS = 5;
+const DEFAULT_DAYS = 5;
+const MIN_DAYS = 1;
+const MAX_DAYS = 30;
 const STORAGE_KEY = "github-pages-trip-planner-v1";
+
+if (new URLSearchParams(window.location.search).get("fresh") === "1") {
+  localStorage.removeItem(STORAGE_KEY);
+  window.history.replaceState({}, document.title, window.location.pathname);
+}
 
 const typeLabels = {
   place: "景點",
@@ -24,7 +31,7 @@ const defaultState = {
   packingList: "",
   activeDay: 0,
   selectedType: "place",
-  days: Array.from({ length: DAYS }, () => [])
+  days: Array.from({ length: DEFAULT_DAYS }, () => [])
 };
 
 let state = loadState();
@@ -44,7 +51,11 @@ const els = {
   itemTime: document.querySelector("#itemTime"),
   itemUrl: document.querySelector("#itemUrl"),
   itemNote: document.querySelector("#itemNote"),
+  dayCount: document.querySelector("#dayCount"),
+  decreaseDaysBtn: document.querySelector("#decreaseDaysBtn"),
+  increaseDaysBtn: document.querySelector("#increaseDaysBtn"),
   timeline: document.querySelector("#timeline"),
+  shareBlankBtn: document.querySelector("#shareBlankBtn"),
   exportBtn: document.querySelector("#exportBtn"),
   importInput: document.querySelector("#importInput"),
   resetBtn: document.querySelector("#resetBtn"),
@@ -58,11 +69,17 @@ function loadState() {
     return {
       ...structuredClone(defaultState),
       ...saved,
-      days: Array.from({ length: DAYS }, (_, index) => saved.days[index] || [])
+      days: normalizeDays(saved.days)
     };
   } catch {
     return structuredClone(defaultState);
   }
+}
+
+function normalizeDays(days) {
+  const safeDays = Array.isArray(days) && days.length ? days : defaultState.days;
+  const dayCount = Math.min(Math.max(safeDays.length, MIN_DAYS), MAX_DAYS);
+  return Array.from({ length: dayCount }, (_, index) => safeDays[index] || []);
 }
 
 function saveState() {
@@ -130,6 +147,7 @@ function syncInputs() {
   els.startDate.value = state.startDate;
   els.budget.value = state.budget;
   els.packingList.value = state.packingList;
+  els.dayCount.value = state.days.length;
 }
 
 function renderDayTabs() {
@@ -156,7 +174,7 @@ function renderStats() {
   els.tripStats.innerHTML = `
     <div class="stat"><strong>${totalItems}</strong><span>行程項目</span></div>
     <div class="stat"><strong>${links}</strong><span>已存連結</span></div>
-    <div class="stat"><strong>${DAYS}</strong><span>旅遊天數</span></div>
+    <div class="stat"><strong>${state.days.length}</strong><span>旅遊天數</span></div>
   `;
 }
 
@@ -268,6 +286,34 @@ function moveItem(from, to) {
   render();
 }
 
+function setDayCount(nextCount) {
+  const count = Math.min(Math.max(Number(nextCount) || DEFAULT_DAYS, MIN_DAYS), MAX_DAYS);
+  if (count === state.days.length) {
+    els.dayCount.value = state.days.length;
+    return;
+  }
+
+  if (count < state.days.length) {
+    const removedDays = state.days.slice(count);
+    const removedItems = removedDays.reduce((sum, day) => sum + day.length, 0);
+    if (removedItems > 0 && !confirm(`減少天數會刪除後面 ${removedItems} 個行程項目，確定要繼續嗎？`)) {
+      els.dayCount.value = state.days.length;
+      return;
+    }
+    state.days = state.days.slice(0, count);
+    state.activeDay = Math.min(state.activeDay, count - 1);
+  } else {
+    state.days = [
+      ...state.days,
+      ...Array.from({ length: count - state.days.length }, () => [])
+    ];
+  }
+
+  els.dayCount.value = state.days.length;
+  saveState();
+  render();
+}
+
 function addItem(event) {
   event.preventDefault();
   const title = els.itemTitle.value.trim();
@@ -311,8 +357,9 @@ function importJson(file) {
       state = {
         ...structuredClone(defaultState),
         ...imported,
-        days: Array.from({ length: DAYS }, (_, index) => imported.days[index] || [])
+        days: normalizeDays(imported.days)
       };
+      state.activeDay = Math.min(state.activeDay, state.days.length - 1);
       saveState();
       syncInputs();
       render();
@@ -329,6 +376,22 @@ function resetTrip() {
   localStorage.removeItem(STORAGE_KEY);
   syncInputs();
   render();
+}
+
+async function shareBlankLink() {
+  const blankUrl = new URL(window.location.href);
+  blankUrl.search = "?fresh=1";
+  blankUrl.hash = "";
+
+  try {
+    await navigator.clipboard.writeText(blankUrl.href);
+    els.shareBlankBtn.textContent = "已複製空白連結";
+    setTimeout(() => {
+      els.shareBlankBtn.textContent = "複製空白分享連結";
+    }, 1800);
+  } catch {
+    prompt("請複製這個空白分享連結：", blankUrl.href);
+  }
 }
 
 function bindEvents() {
@@ -349,6 +412,9 @@ function bindEvents() {
     state.packingList = els.packingList.value;
     saveState();
   });
+  els.dayCount.addEventListener("change", () => setDayCount(els.dayCount.value));
+  els.decreaseDaysBtn.addEventListener("click", () => setDayCount(state.days.length - 1));
+  els.increaseDaysBtn.addEventListener("click", () => setDayCount(state.days.length + 1));
   document.querySelectorAll(".type-button").forEach((button) => {
     button.addEventListener("click", () => {
       state.selectedType = button.dataset.type;
@@ -357,6 +423,7 @@ function bindEvents() {
     });
   });
   els.itemForm.addEventListener("submit", addItem);
+  els.shareBlankBtn.addEventListener("click", shareBlankLink);
   els.exportBtn.addEventListener("click", exportJson);
   els.importInput.addEventListener("change", (event) => importJson(event.target.files[0]));
   els.resetBtn.addEventListener("click", resetTrip);

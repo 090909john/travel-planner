@@ -14,6 +14,7 @@
         <h1>五天四夜旅遊行程</h1>
       </div>
       <div class="header-actions">
+        <button class="ghost-button" id="shareBlankBtn" type="button">複製空白分享連結</button>
         <button class="ghost-button" id="exportBtn" type="button">匯出 JSON</button>
         <label class="ghost-button file-button">
           匯入 JSON
@@ -38,6 +39,15 @@
           <div>
             <label for="budget">預算</label>
             <input id="budget" type="number" min="0" step="100" placeholder="NT$">
+          </div>
+        </section>
+
+        <section class="panel-section">
+          <label for="dayCount">旅遊天數</label>
+          <div class="stepper-row">
+            <button class="icon-button" id="decreaseDaysBtn" type="button" title="減少天數" aria-label="減少天數">−</button>
+            <input id="dayCount" type="number" min="1" max="30" step="1">
+            <button class="icon-button" id="increaseDaysBtn" type="button" title="增加天數" aria-label="增加天數">+</button>
           </div>
         </section>
 
