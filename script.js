@@ -2,6 +2,7 @@ const DEFAULT_DAYS = 5;
 const MIN_DAYS = 1;
 const MAX_DAYS = 30;
 const STORAGE_KEY = "github-pages-trip-planner-v1";
+const DEFAULT_PAGE_TITLE = "旅遊行程規劃";
 
 if (new URLSearchParams(window.location.search).get("fresh") === "1") {
   localStorage.removeItem(STORAGE_KEY);
@@ -39,6 +40,7 @@ let dragIndex = null;
 
 const els = {
   tripTitle: document.querySelector("#tripTitle"),
+  pageTitle: document.querySelector("#pageTitle"),
   startDate: document.querySelector("#startDate"),
   budget: document.querySelector("#budget"),
   packingList: document.querySelector("#packingList"),
@@ -148,6 +150,13 @@ function syncInputs() {
   els.budget.value = state.budget;
   els.packingList.value = state.packingList;
   els.dayCount.value = state.days.length;
+  syncPageTitle();
+}
+
+function syncPageTitle() {
+  const title = state.title.trim() || DEFAULT_PAGE_TITLE;
+  els.pageTitle.textContent = title;
+  document.title = title;
 }
 
 function renderDayTabs() {
@@ -397,6 +406,7 @@ async function shareBlankLink() {
 function bindEvents() {
   els.tripTitle.addEventListener("input", () => {
     state.title = els.tripTitle.value;
+    syncPageTitle();
     saveState();
   });
   els.startDate.addEventListener("input", () => {
