@@ -3,8 +3,11 @@ const MIN_DAYS = 1;
 const MAX_DAYS = 30;
 const STORAGE_KEY = "github-pages-trip-planner-v1";
 const DEFAULT_PAGE_TITLE = "旅遊行程規劃";
+const SHARE_URL_WARNING_LENGTH = 7000;
 
-if (new URLSearchParams(window.location.search).get("fresh") === "1") {
+const initialParams = new URLSearchParams(window.location.search);
+
+if (initialParams.get("fresh") === "1") {
   localStorage.removeItem(STORAGE_KEY);
   window.history.replaceState({}, document.title, window.location.pathname);
 }
@@ -35,6 +38,8 @@ const defaultState = {
   days: Array.from({ length: DEFAULT_DAYS }, () => [])
 };
 
+loadPlanFromUrl();
+
 let state = loadState();
 let dragIndex = null;
 
@@ -57,6 +62,7 @@ const els = {
   decreaseDaysBtn: document.querySelector("#decreaseDaysBtn"),
   increaseDaysBtn: document.querySelector("#increaseDaysBtn"),
   timeline: document.querySelector("#timeline"),
+  sharePlanBtn: document.querySelector("#sharePlanBtn"),
   shareBlankBtn: document.querySelector("#shareBlankBtn"),
   exportBtn: document.querySelector("#exportBtn"),
   importInput: document.querySelector("#importInput"),
@@ -76,6 +82,48 @@ function loadState() {
   } catch {
     return structuredClone(defaultState);
   }
+}
+
+function loadPlanFromUrl() {
+  const encodedPlan = initialParams.get("plan");
+  if (!encodedPlan) return;
+
+  try {
+    const imported = sanitizeImportedState(decodePlan(encodedPlan));
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(imported));
+    window.history.replaceState({}, document.title, window.location.pathname);
+  } catch {
+    alert("分享連結載入失敗，可能是網址不完整或資料已損壞。");
+  }
+}
+
+function sanitizeImportedState(imported) {
+  if (!imported || !Array.isArray(imported.days)) throw new Error("Invalid plan");
+  const nextState = {
+    ...structuredClone(defaultState),
+    ...imported,
+    days: normalizeDays(imported.days)
+  };
+  nextState.activeDay = Math.min(Math.max(Number(nextState.activeDay) || 0, 0), nextState.days.length - 1);
+  return nextState;
+}
+
+function encodePlan(plan) {
+  const json = JSON.stringify(plan);
+  const bytes = new TextEncoder().encode(json);
+  let binary = "";
+  bytes.forEach((byte) => {
+    binary += String.fromCharCode(byte);
+  });
+  return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
+}
+
+function decodePlan(encodedPlan) {
+  const base64 = encodedPlan.replace(/-/g, "+").replace(/_/g, "/");
+  const padded = base64.padEnd(Math.ceil(base64.length / 4) * 4, "=");
+  const binary = atob(padded);
+  const bytes = Uint8Array.from(binary, (char) => char.charCodeAt(0));
+  return JSON.parse(new TextDecoder().decode(bytes));
 }
 
 function normalizeDays(days) {
@@ -362,13 +410,7 @@ function importJson(file) {
   reader.addEventListener("load", () => {
     try {
       const imported = JSON.parse(reader.result);
-      if (!Array.isArray(imported.days)) throw new Error("Invalid file");
-      state = {
-        ...structuredClone(defaultState),
-        ...imported,
-        days: normalizeDays(imported.days)
-      };
-      state.activeDay = Math.min(state.activeDay, state.days.length - 1);
+      state = sanitizeImportedState(imported);
       saveState();
       syncInputs();
       render();
@@ -403,6 +445,30 @@ async function shareBlankLink() {
   }
 }
 
+async function shareCurrentPlanLink() {
+  const planUrl = new URL(window.location.href);
+  planUrl.search = `?plan=${encodePlan(state)}`;
+  planUrl.hash = "";
+
+  if (planUrl.href.length > SHARE_URL_WARNING_LENGTH) {
+    alert("這份行程資料較多，分享網址可能太長。仍會嘗試複製；如果聊天軟體無法傳送，請改用「匯出 JSON」。");
+  }
+
+  await copyShareLink(planUrl.href, els.sharePlanBtn, "已複製目前行程連結", "產生目前行程分享連結");
+}
+
+async function copyShareLink(url, button, successText, defaultText) {
+  try {
+    await navigator.clipboard.writeText(url);
+    button.textContent = successText;
+    setTimeout(() => {
+      button.textContent = defaultText;
+    }, 1800);
+  } catch {
+    prompt("請複製這個分享連結：", url);
+  }
+}
+
 function bindEvents() {
   els.tripTitle.addEventListener("input", () => {
     state.title = els.tripTitle.value;
@@ -433,6 +499,7 @@ function bindEvents() {
     });
   });
   els.itemForm.addEventListener("submit", addItem);
+  els.sharePlanBtn.addEventListener("click", shareCurrentPlanLink);
   els.shareBlankBtn.addEventListener("click", shareBlankLink);
   els.exportBtn.addEventListener("click", exportJson);
   els.importInput.addEventListener("change", (event) => importJson(event.target.files[0]));
